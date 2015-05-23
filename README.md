@@ -6,4 +6,4 @@ The data for this project come from this source: <br>
 http://groupware.les.inf.puc-rio.br/har. 
 
 You can directly view the HTML page in this link: <br>
-http://xmflower.github.io/predmachlearn-014/index.html
+http://xmflower.github.io/predmachlearn-014/project.html
