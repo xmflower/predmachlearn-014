@@ -1,0 +1,168 @@
+---
+title: "Practical Machine Learning Course Project"
+author: 
+date: 
+output:
+  html_document:
+    theme: cerulean
+  pdf_document: default
+---
+
+### Overview:
+
+This article is about doing machine learning, traning some models on the Weight Lifting Exercise Dataset, to predict the manner in which paticipants did the exercise.  
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+
+### Data cleaning:
+
+Reading data from csv files, and check the data summary.
+```{r message = FALSE, warning = FALSE, results = 'hide'}
+
+rawtraining <- read.csv("C:/Study/R/predmachlearn-014/pml-training.csv", na.strings=c("NA",""))
+rawtesting <- read.csv("C:/Study/R/predmachlearn-014/pml-testing.csv" ,na.strings=c("NA",""))
+summary(rawtraining)
+summary(rawtesting)
+
+```
+
+From the summary we find many columns have a lot of NAs.  
+Removing these columns as well as the timestamp columns which seem irrelevant with our prediction.
+```{r message = FALSE, warning = FALSE, results = 'hide'}
+
+indexNA <- 1
+for (i in 1:160) {
+    if (sum(is.na(rawtraining[,i])) > 0) {
+        indexNA <- c(indexNA, i)
+    }      
+}
+
+indexNA2 <- 1
+for (i in 1:160) {
+    if (sum(is.na(rawtesting[,i])) > 0) {
+        indexNA2 <- c(indexNA2, i)
+    }      
+}
+
+indexNA == indexNA2  ## make sure remove same variables from training and testing dataset
+
+cleantraining <- rawtraining[, -c(indexNA, 3,4,5)]
+testcases <- rawtesting[, -c(indexNA2, 3,4,5)]
+
+```
+
+
+### Data Slicing
+
+Now slicing the cleantraining dataset to train, validation, testing.
+```{r message = FALSE, warning = FALSE}
+
+library(caret)
+inTrain <- createDataPartition(y = cleantraining$classe, p = 0.8, list = FALSE)
+training <- cleantraining[inTrain, ]
+testing <- cleantraining[-inTrain, ]
+
+inTrain <- createDataPartition(y = training$classe, p = 0.8, list = FALSE)
+train <- training[inTrain, ]
+validation <- training[-inTrain, ]
+
+```
+
+
+### Choose model
+
+Let's try some models, and using validation dataset to compare their accuracy.
+To save computer memory, I already built the model and saved them, now only need to load them back
+```{r message = FALSE, warning = FALSE}
+
+library(ipred)
+library(gbm)
+library(randomForest)
+
+#rpartMod <- train(classe ~ ., data = train, method = "rpart")
+#saveRDS(rpartMod, "rpartMod.rds")
+rpartMod <- readRDS("C:/Study/R/rpartMod.rds")
+confusionMatrix(validation$classe, predict(rpartMod, validation))$overall[1]
+
+#treebagMod <- train(classe ~ ., data = train, method = "treebag")
+#saveRDS(treebagMod, "treebagMod.rds") 
+treebagMod <- readRDS("C:/Study/R/treebagMod.rds")
+confusionMatrix(validation$classe, predict(treebagMod, validation))$overall[1]
+
+#gbmMod <- train(classe ~ ., data = train, method = "gbm")
+#saveRDS(gbmMod, "gbmMod.rds") 
+gbmMod <- readRDS("C:/Study/R/gbmMod.rds")
+confusionMatrix(validation$classe, predict(gbmMod, validation))$overall[1]
+
+#rtMod <- randomForest(classe ~ ., data = train)
+#saveRDS(rtMod, "rtMod.rds") 
+rtMod <- readRDS("C:/Study/R/rtMod.rds")
+confusionMatrix(validation$classe, predict(rtMod, validation))$overall[1]
+
+```
+
+Tree bag, GBM, random forest all do very good.   
+Building the random forest model took me the least time, so pick random forest to train our final model on whole training dataset.
+
+
+### Cross validation
+
+In sample error is the error rate you get on the same data set you used to build your predictor.  
+Out of sample error is the error rate you get on a new data set.  
+In sample error is less than out of sample error due to overfitting.  
+So accuracy on training set is optimistic.  
+Creating 10 folds to perform cross validation and validating our expected out of sample error: 
+```{r message = FALSE, warning = FALSE}
+
+set.seed(1234)
+folds <- createFolds(y = training$classe, k = 10, list = TRUE, returnTrain = TRUE)
+Accuracy <- data.frame()
+for (i in 1:10) {
+    mod <- randomForest(classe ~ ., data = training[folds[[i]], ])
+    train_accu <- confusionMatrix(training[folds[[i]], ]$classe, predict(mod, training[folds[[i]], ]))$overall[1]
+    test_accu <- confusionMatrix(training[-folds[[i]], ]$classe, predict(mod, training[-folds[[i]], ]))$overall[1]
+    Accuracy <- rbind(Accuracy, c(train_accu, test_accu, train_accu - test_accu))
+    colnames(Accuracy) <- c("Train_Accuracy", "Test_Accuracy", "Delta (train - test)")
+}
+
+Accuracy
+train_error <- sum(1 - Accuracy$Train_Accuracy) / 10
+test_error <- sum(1 - Accuracy$Test_Accuracy) / 10
+train_error
+test_error
+
+```
+From the cross validation, we can see that the test error (out of sample error) is greater than train error(in sample error).     
+However, the delta are small, so our model is not very overfitting, we can use it without many concern.
+
+
+### Final model
+
+Training our final model on the whole training dataset (train + validation) using random forest.
+```{r message = FALSE, warning = FALSE}
+
+ModFit <- randomForest(classe ~ ., data = training)
+ModFit
+
+```
+
+
+### Prediction
+
+Predicting the testing dataset we've reserved.
+The result is very good.
+```{r message = FALSE, warning = FALSE}
+
+result <- predict(ModFit, testing)
+confusionMatrix(testing$classe, result)
+
+```
+
+Predicting the testcases, to finish the submission project.
+```{r message = FALSE, warning = FALSE}
+
+testing2 <- rbind(testcases[,-56], testing[,-56])  ## row combind to avoid the type issue
+result2 <- predict(ModFit, testing2)  
+result2[1:20]   ## subset the first 20, that is the prediction of 20 testcases.
+
+```
