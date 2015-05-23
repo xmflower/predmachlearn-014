@@ -1,4 +1,4 @@
-# predmachlearn-014
+# Practical Machine Learning Course Project
 
 This project is about doing machine learning, traning some models on the Weight Lifting Exercise Dataset, to predict the manner in which paticipants did the exercise. <br>
 
